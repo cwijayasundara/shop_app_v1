@@ -1,0 +1,100 @@
+// Captured evidence: every verdict reads exit codes recorded here, never what the model says happened.
+import fs from 'node:fs'
+import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { maskSecrets } from './model.ts'
+import { ROOT, CHANGES, now, read, sha, frontmatter, readJsonl } from './core.ts'
+
+export type RunRow = { at: string; cmd: string; cwd?: string; exit: number; ms: number; tail: string; expectFail?: true; timedOut?: true; source?: 'gate' | 'ship'; tree?: string }
+
+const TAIL_LINES = 30
+const TIMED_OUT = 124
+
+// spawnSync's own timeout kills only the shell, then waits for any grandchild still holding stdout
+// (npm test -> node, jest workers). This wrapper runs the command in its own process group and kills
+// the whole group on timeout (taskkill /T on Windows), so a hang can never outlive the budget.
+const WRAPPER = `
+const cp = require('node:child_process')
+const [cmd, ms] = process.argv.slice(1)
+const win = process.platform === 'win32'
+const child = cp.spawn(cmd, { shell: true, detached: !win, stdio: ['ignore', 'inherit', 'inherit'] })
+const kill = () => { try { win ? cp.spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']) : process.kill(-child.pid, 'SIGKILL') } catch {} }
+const timer = setTimeout(() => { kill(); process.exit(${TIMED_OUT}) }, Number(ms))
+child.on('exit', code => { clearTimeout(timer); process.exit(code ?? 1) })
+child.on('error', () => process.exit(127))
+`
+
+// `stdout`, when given, receives the command's whole stdout (no stderr, no tail cap) for callers that parse it.
+export function runCommand(cmd: string, opts: { cwd?: string; timeoutMs?: number; stdout?: (text: string) => void } = {}): RunRow {
+  const started = Date.now()
+  const timeoutMs = opts.timeoutMs ?? 600_000
+  // A declared `node --test` must really run even when sdlc itself runs inside a node test process.
+  const env = { ...process.env }
+  delete env.NODE_TEST_CONTEXT
+  // The PR's own test commands run here at CI; the review-lookup token is for sdlc itself, not for them.
+  delete env.GH_TOKEN
+  delete env.GITHUB_TOKEN
+  const r = spawnSync(process.execPath, ['-e', WRAPPER, cmd, String(timeoutMs)], { cwd: opts.cwd ?? ROOT, env, encoding: 'utf8', timeout: timeoutMs + 5_000, maxBuffer: 64 * 1024 * 1024 })
+  opts.stdout?.((r.stdout ?? '').replace(/\r\n/g, '\n'))
+  const text = `${r.stdout ?? ''}${r.stderr ?? ''}`.replace(/\r\n/g, '\n').trimEnd()
+  const ms = Date.now() - started
+  const timedOut = (r.status === TIMED_OUT && ms >= timeoutMs) || (r.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT'
+  const row: RunRow = { at: now(), cmd, exit: r.status ?? TIMED_OUT, ms, tail: maskSecrets(text.split('\n').slice(-TAIL_LINES).join('\n')) }
+  if (opts.cwd && opts.cwd !== ROOT) row.cwd = opts.cwd
+  if (timedOut) row.timedOut = true
+  return row
+}
+
+export const runsFile = (slug: string): string => path.join(CHANGES, slug, 'runs.jsonl')
+export const readRuns = (slug: string): RunRow[] => readJsonl<RunRow>(runsFile(slug))
+
+export function recordRun(slug: string, row: RunRow): void {
+  fs.mkdirSync(path.dirname(runsFile(slug)), { recursive: true })
+  fs.appendFileSync(runsFile(slug), JSON.stringify(row) + '\n')
+}
+
+export const normCmd = (cmd: string): string => cmd.trim().replace(/\s+/g, ' ')
+
+// The verdict is the latest explicit run of each plan ## Verification command (or of every explicit command
+// when the plan lists none). Expect-fail rows are evidence of red, and gate/ship rows are the sensors' own runs:
+// neither is a verdict, so a known-red lint at Stop or an abandoned exploratory run cannot poison verification.
+export function renderVerification(rows: RunRow[], digest: string, planned: string[] = [], ignored: string[] = [], levels: { level: string; status: string }[] = [], o: { tree?: string | null; full?: 'pass' | 'fail' | 'none' } = {}): { text: string; result: 'pass' | 'fail' } {
+  const latest = new Map<string, RunRow>()
+  for (const r of rows) if (!r.expectFail && !r.source) latest.set(normCmd(r.cmd), r)
+  const wanted = planned.map(normCmd)
+  // A section whose bullets all failed to parse requires nothing; that must fail, not fall back to every run.
+  const unparsed = wanted.length === 0 && ignored.length > 0
+  const verdicts = wanted.length ? wanted.flatMap(c => latest.get(c) ?? []) : unparsed ? [] : [...latest.values()]
+  const notRun = wanted.filter(c => !latest.has(c))
+  const levelsOk = levels.every(l => l.status === 'pass' || l.status === 'plan')
+  const fullOk = o.full !== 'fail'
+  const result = fullOk && levelsOk && !unparsed && verdicts.length > 0 && notRun.length === 0 && verdicts.every(r => r.exit === 0) ? 'pass' : 'fail'
+  const fence = (t: string): string => '```\n' + t + '\n```'
+  const red = rows.filter(r => r.expectFail)
+  const text = [
+    '---', `result: ${result}`, `verified: ${now()}`, 'generated: sdlc', `runs: ${rows.length}`, `digest: ${digest}`,
+    ...(levels.length ? [`levels: ${levels.map(l => `${l.level}=${l.status}`).join(',')}`] : []),
+    ...(o.tree ? [`tree: ${o.tree}`] : []), ...(o.full ? [`full: ${o.full}`] : []),
+    '---',
+    '# Verification', '', 'Generated by `sdlc.ts verify-report` from runs.jsonl. Do not edit by hand.', '',
+    '## Commands',
+    ...verdicts.flatMap(r => [`- \`${r.cmd}\` → exit ${r.exit}${r.timedOut ? ' (timed out)' : ''} in ${r.ms} ms`, fence(r.tail)]),
+    ...(red.length ? ['', '## Red runs (expected to fail)', ...red.map(r => `- \`${r.cmd}\` → exit ${r.exit}`)] : []),
+    ...(levels.length ? ['', '## Test levels', ...levels.map(l => `- ${l.level}: ${l.status}`)] : []),
+    ...(o.full === 'fail' ? ['', '## Full commands', '- a declared full command failed: see the runs with source ship in runs.jsonl'] : []),
+    ...(notRun.length ? ['', '## Not run (listed in plan ## Verification)', ...notRun.map(c => `- \`${c}\``)] : []),
+    ...(ignored.length ? ['', '## Ignored (not commands; listed in plan ## Verification)', ...ignored.map(t => `- ${t}`)] : []),
+    ...(unparsed ? ['', 'No bullet in plan ## Verification parsed as a command. The architect must write one leading backticked command per bullet.'] : []),
+    verdicts.length || unparsed ? '' : '\nNo commands were run: record them with `sdlc.ts run -- "<command>"`.',
+  ].join('\n')
+  return { text: text + '\n', result }
+}
+
+export const runsDigest = (slug: string, count: number): string => sha(read(runsFile(slug)).split('\n').slice(0, count).join('\n'))
+
+// verification.md counts only when sdlc generated it and the runs it summarised are unchanged.
+export function verifiedPass(dir: string): boolean {
+  const { data } = frontmatter(read(path.join(dir, 'verification.md')))
+  if (data.generated !== 'sdlc' || data.result !== 'pass' || Number(data.runs) < 1) return false
+  return runsDigest(path.basename(dir), Number(data.runs)) === data.digest
+}

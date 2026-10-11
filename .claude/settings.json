@@ -1,0 +1,164 @@
+{
+  "env": {
+    "ENABLE_STOP_REVIEW": "0",
+    "CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "true",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5"
+  },
+  "permissions": {
+    "allow": [
+      "Edit(.rig/**)",
+      "Bash(node --disable-warning=ExperimentalWarning .rig/bin/sdlc.ts *)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(/.rig/approvals.jsonl)",
+      "Edit(/.rig/waivers.jsonl)",
+      "Edit(/.rig/usage.jsonl)",
+      "Edit(/.rig/spend-cache.json)",
+      "Edit(/.rig/spend-fetched)",
+      "Edit(/.rig/budget-seen.json)",
+      "Edit(/.rig/.gate)",
+      "Edit(/.rig/.baseline)",
+      "Edit(/.rig/unresolved.json)",
+      "Edit(/.rig/PREFLIGHT.md)",
+      "Edit(/.rig/evals/results.jsonl)",
+      "Edit(/.rig/gates.jsonl)",
+      "Edit(/.rig/watch/*.jsonl)",
+      "Edit(/.rig/changes/*/runs.jsonl)",
+      "Edit(/.rig/changes/*/verification.md)",
+      "Edit(/.rig/changes/*/impact.json)",
+      "Edit(/.rig/changes/*/ratchet.json)",
+      "Edit(/.rig/changes/*/events.jsonl)",
+      "Edit(/.rig/changes/*/pr.md)",
+      "Edit(/.rig/changes/*/ship.json)"
+    ],
+    "ask": [
+      "Edit(/.rig/sensors.json)",
+      "Edit(/.rig/rules.json)",
+      "Edit(/.rig/evals/*.json)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.rig/bin/**)",
+      "Edit(/.rig/githooks/**)",
+      "Edit(/.rig/mod/**)",
+      "Edit(/.rig/guides/**)",
+      "Edit(/.github/workflows/rig-check.yml)",
+      "Edit(/CODEOWNERS)",
+      "Edit(/.github/CODEOWNERS)",
+      "Edit(/migrations/**)",
+      "Edit(/infra/**)",
+      "Bash(node --disable-warning=ExperimentalWarning .rig/bin/sdlc.ts evals*)",
+      "Edit(/.github/workflows/rig-*.yml)"
+    ]
+  },
+  "model": "claude-sonnet-5-5",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook prompt-submit",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook stop",
+            "timeout": 90
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook post-edit",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook subagent-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook subagent-stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --disable-warning=ExperimentalWarning \"$CLAUDE_PROJECT_DIR/.rig/bin/sdlc.ts\" hook skill-failed",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "rig@rig-local": true,
+    "rig-brain@rig": true,
+    "superpowers@claude-plugins-official": false
+  },
+  "extraKnownMarketplaces": {
+    "rig": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/chamindawijayasundara/Documents/learning_101/rig_v1"
+      }
+    },
+    "rig-local": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "autoCompactWindow": 200000
+}

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "modules": {
+    "cart": {
+      "hash": "b58c2a440eb893c8",
+      "sigHash": "c6bad322cbdf06ce",
+      "status": "fresh",
+      "generated": "2026-10-11",
+      "fileHashes": {
+        "src/cart/cart.js": "324d28a08794b17c"
+      }
+    },
+    "catalog": {
+      "hash": "9098477e669d9a10",
+      "sigHash": "5110004ad1ef403c",
+      "status": "fresh",
+      "generated": "2026-10-11",
+      "fileHashes": {
+        "src/catalog/products.js": "16d9d6d1a89920ae"
+      }
+    },
+    "http": {
+      "hash": "aa4d7ce966f7da41",
+      "sigHash": "3d69e37fd1b0cce5",
+      "status": "fresh",
+      "generated": "2026-10-11",
+      "fileHashes": {
+        "src/http/handler.js": "1bda522dc7c8e997"
+      }
+    },
+    "orders": {
+      "hash": "0106cd795f4b8503",
+      "sigHash": "c11f3ea996fbc00b",
+      "status": "fresh",
+      "generated": "2026-10-11",
+      "fileHashes": {
+        "src/orders/orders.js": "b0e758fdf6ad6eba"
+      }
+    },
+    "test": {
+      "hash": "2747c64efd27358f",
+      "sigHash": "e3b0c44298fc1c14",
+      "status": "fresh",
+      "generated": "2026-10-11",
+      "fileHashes": {
+        "test/shop.test.js": "52d1b7ab8f44a18a"
+      }
+    }
+  },
+  "architectureHash": "3633519e9ce0f675"
+}

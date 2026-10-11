@@ -1,0 +1,9 @@
+usage.jsonl
+.baseline
+.gate
+unresolved.json
+gates.jsonl
+spend-cache.json
+spend-fetched
+budget-seen.json
+.onboarding

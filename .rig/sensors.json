@@ -1,0 +1,12 @@
+{
+  "fast": { "test": "node --test --test-reporter=dot test/shop.test.js" },
+  "full": { "test": "npm test" },
+  "levels": {
+    "unit": "npm test",
+    "integration": "npm test",
+    "acceptance": "npm test",
+    "api": "npm test"
+  },
+  "gates": { "M": ["design"], "L": ["spec", "plan", "design"] },
+  "value": { "rate": 100 }
+}
